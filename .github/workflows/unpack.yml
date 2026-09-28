@@ -40,6 +40,9 @@ jobs:
           rm -rf _scrimforge_extract
           rm -f "ScrimForge-V5-CLEAN.zip"
 
+          # Never replace the GitHub Actions workflow itself
+          git restore .github/workflows/unpack.yml
+
       - name: Commit extracted V5
         if: steps.check.outputs.found == 'true'
         run: |
