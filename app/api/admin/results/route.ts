@@ -24,7 +24,7 @@ export async function POST(req:Request){
   if(!Number.isInteger(placement)||placement<1||placement>12)return NextResponse.json({error:"Placement must be 1-12"},{status:400});
   if(!Number.isInteger(kills)||kills<0)return NextResponse.json({error:"Kills cannot be negative"},{status:400});
   const team=String(b.team_name).trim();
-  const exists=await db.query(`select 1 from registrations where lobby_id=$1 and team_name=$2 and status<>'REJECTED' limit 1`,[b.lobby_id,team]);
+  const exists=await db.query(`select 1 from scrim_teams where lobby_id=$1 and team_name=$2 limit 1`,[b.lobby_id,team]);
   if(!exists.rows.length)return NextResponse.json({error:"That team is not registered in this scrim"},{status:400});
   const occupied=await db.query(`select team_name from results where lobby_id=$1 and match_no=$2 and placement=$3 and team_name<>$4 limit 1`,[b.lobby_id,matchNo,placement,team]);
   if(occupied.rows.length)return NextResponse.json({error:`Placement ${placement} is already assigned to ${occupied.rows[0].team_name} for Match ${matchNo}`},{status:400});

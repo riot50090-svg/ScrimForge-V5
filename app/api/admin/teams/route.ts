@@ -1,0 +1,2 @@
+import{NextResponse}from"next/server";import{admin}from"@/lib/auth";import{db}from"@/lib/db";
+export async function GET(req:Request){if(!(await admin()))return NextResponse.json({error:"Unauthorized"},{status:401});const lobby=String(new URL(req.url).searchParams.get("lobby_id")||"").trim();if(!lobby)return NextResponse.json([]);const q=await db.query(`select team_name,captain_name,contact_no from scrim_teams where lobby_id=$1 order by team_name`,[lobby]);return NextResponse.json(q.rows)}
