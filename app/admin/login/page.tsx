@@ -1,1 +1,0 @@
-import Form from "./form";export default function Page(){return <main className="login"><div className="loginbox"><div className="brand"><span className="mark">SF</span>ScrimForge</div><span className="eyebrow">ADMIN CONTROL</span><h1>Sign in</h1><p className="muted">Private administrator access.</p><Form/></div></main>}
