@@ -1,0 +1,52 @@
+name: Unpack ScrimForge V5
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for package
+        id: check
+        run: |
+          if [ -f "ScrimForge-V5-COMPLETE.zip" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract package
+        if: steps.check.outputs.found == 'true'
+        run: |
+          rm -rf _scrimforge_extract
+          mkdir _scrimforge_extract
+          unzip -q "ScrimForge-V5-COMPLETE.zip" -d _scrimforge_extract
+
+          ROOT="_scrimforge_extract/ScrimForge-V5-COMPLETE"
+
+          cp -R "$ROOT"/. .
+
+          rm -rf _scrimforge_extract
+          rm -f "ScrimForge-V5-COMPLETE.zip"
+
+      - name: Commit extracted files
+        if: steps.check.outputs.found == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          git diff --cached --quiet || git commit -m "Install complete ScrimForge V5"
+
+          git push
