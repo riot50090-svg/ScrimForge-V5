@@ -1,0 +1,59 @@
+name: Unpack ScrimForge V5
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check ZIP
+        id: check
+        run: |
+          if [ -f "ScrimForge-V5-CLEAN.zip" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract V5
+        if: steps.check.outputs.found == 'true'
+        run: |
+          rm -rf _extract
+          mkdir _extract
+
+          unzip -q "ScrimForge-V5-CLEAN.zip" -d _extract
+
+          ROOT="_extract/ScrimForge-V5-COMPLETE"
+
+          cp -R "$ROOT"/. .
+
+          rm -rf _extract
+          rm -f "ScrimForge-V5-CLEAN.zip"
+
+          rm -rf .github
+
+      - name: Commit V5 files
+        if: steps.check.outputs.found == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git reset -- .github 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Install ScrimForge V5"
+            git push
+          fi
