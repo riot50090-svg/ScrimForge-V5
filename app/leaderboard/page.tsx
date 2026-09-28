@@ -1,0 +1,6 @@
+import Link from"next/link";
+import{db}from"@/lib/db";
+import Board from"./board";
+export const dynamic="force-dynamic";
+export default async function Page(){const q=await db.query(`select id,title,match_count from lobbies where game='Free Fire' and status<>'CANCELLED' order by starts_at`);return <main><Nav/><section className="wrap page"><span className="eyebrow">FREE FIRE LIVE RANKINGS</span><h1>Live Leaderboard</h1><p className="muted">Scores are accumulated across the selected scrim. Ranking is based on total points, then Booyahs, then kill points. The usual placement system is 12/9/8/7/6/5/4/3/2/1/0/0 plus 1 point per kill.</p>{q.rows.length?<Board lobbies={q.rows}/>:<div className="empty">No Free Fire scrim sessions yet.</div>}</section></main>}
+function Nav(){return <nav className="nav"><Link href="/" className="brand"><span className="mark">SF</span>ScrimForge</Link><div className="navlinks"><Link href="/scrims">Scrims</Link><Link href="/leaderboard">Leaderboard</Link><Link href="/results">Results</Link><Link href="/rules">Rules</Link><Link href="/register" className="navcta">Register</Link><Link href="/admin/login">Admin</Link></div></nav>}
