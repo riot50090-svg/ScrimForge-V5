@@ -2,16 +2,33 @@ const {Client}=require('pg'); const bcrypt=require('bcryptjs');
 (async()=>{if(!process.env.DATABASE_URL){console.log('DATABASE_URL missing; skipping DB init for local build.');return}
 const c=new Client({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}}); await c.connect();
 await c.query(`CREATE TABLE IF NOT EXISTS admins(id text primary key,email text unique not null,password_hash text not null,created_at timestamptz default now());
-CREATE TABLE IF NOT EXISTS lobbies(id text primary key,title text not null,game text not null,mode text not null,map text,entry_fee int default 0,prize_pool int default 0,max_teams int default 12,match_count int default 6,starts_at timestamptz not null,status text default 'OPEN',room_id text,room_password text,rules text,created_at timestamptz default now());
+CREATE TABLE IF NOT EXISTS lobbies(id text primary key,title text not null,game text not null,mode text not null,map text,entry_fee int default 0,prize_pool int default 0,max_teams int default 12,match_count int default 6,starts_at timestamptz,status text default 'OPEN',room_id text,room_password text,rules text,schedule_text text,created_at timestamptz default now());
 CREATE TABLE IF NOT EXISTS registrations(id text primary key,code text unique not null,player_name text not null,team_name text not null,whatsapp text not null,game_id text,game text not null,lobby_id text references lobbies(id) on delete set null,status text default 'PENDING',payment_status text default 'UNPAID',payment_ref text,notes text,created_at timestamptz default now());
 CREATE TABLE IF NOT EXISTS results(id text primary key,lobby_id text references lobbies(id) on delete cascade,team_name text not null,match_no int not null default 1,placement int default 0,kills int default 0,points int default 0,created_at timestamptz default now());
 CREATE TABLE IF NOT EXISTS audit_logs(id text primary key,action text not null,detail text,created_at timestamptz default now());
 ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS match_count int NOT NULL DEFAULT 6;
+ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS schedule_text text;
+ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS event_type text NOT NULL DEFAULT 'SCRIM';
+ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS group_size int NOT NULL DEFAULT 12;
+ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS current_stage int NOT NULL DEFAULT 1;
+ALTER TABLE lobbies ALTER COLUMN starts_at DROP NOT NULL;
 -- Registration UI uses team_name + player_name(captain) + whatsapp(contact). Free Fire UID is intentionally optional/unused.
 ALTER TABLE results ADD COLUMN IF NOT EXISTS match_no int NOT NULL DEFAULT 1;
-UPDATE lobbies SET game='Free Fire',mode='Squad',map=NULL,max_teams=12,match_count=COALESCE(match_count,6) WHERE game IS NULL OR game<>'Free Fire' OR mode<>'Squad' OR map IS NOT NULL OR max_teams<>12 OR match_count IS NULL;
+ALTER TABLE results ADD COLUMN IF NOT EXISTS stage_no int NOT NULL DEFAULT 1;
+ALTER TABLE results ADD COLUMN IF NOT EXISTS group_no int NOT NULL DEFAULT 1;
+ALTER TABLE results ADD COLUMN IF NOT EXISTS group_id text;
+ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS distribution_mode text NOT NULL DEFAULT 'balanced';
+ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS source_stage_no int;
+ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS qualification_mode text NOT NULL DEFAULT 'each_group';
+ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS source_pool text NOT NULL DEFAULT 'qualified';
+CREATE TABLE IF NOT EXISTS tournament_stages(id text primary key,lobby_id text references lobbies(id) on delete cascade,stage_no int not null,name text not null,match_count int not null default 2,qualify_per_group int not null default 4,group_size int not null default 12,status text default 'PENDING',created_at timestamptz default now(),completed_at timestamptz,unique(lobby_id,stage_no));
+CREATE TABLE IF NOT EXISTS tournament_groups(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_no int not null,name text not null,status text default 'OPEN',unique(stage_id,group_no));
+CREATE TABLE IF NOT EXISTS tournament_entries(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_id text references tournament_groups(id) on delete cascade,registration_id text references registrations(id) on delete cascade,team_name text not null,seed int,status text default 'ACTIVE',final_rank int,qualified boolean default false,created_at timestamptz default now(),unique(stage_id,registration_id));
+
+UPDATE lobbies SET game='Free Fire',mode='Squad',map=NULL,match_count=COALESCE(match_count,6),event_type=COALESCE(event_type,'SCRIM'),group_size=COALESCE(group_size,12),current_stage=COALESCE(current_stage,1) WHERE game IS NULL OR game<>'Free Fire' OR mode<>'Squad' OR map IS NOT NULL OR match_count IS NULL;
 ALTER TABLE lobbies DROP CONSTRAINT IF EXISTS lobbies_match_count_check;
 ALTER TABLE lobbies ADD CONSTRAINT lobbies_match_count_check CHECK(match_count BETWEEN 1 AND 16);
+INSERT INTO tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status) SELECT md5(random()::text||clock_timestamp()::text),l.id,1,CASE WHEN l.event_type='TOURNAMENT' THEN 'Qualifiers' ELSE 'Main Stage' END,l.match_count,4,12,'PENDING' FROM lobbies l WHERE NOT EXISTS(select 1 from tournament_stages s where s.lobby_id=l.id and s.stage_no=1);
 ALTER TABLE results DROP CONSTRAINT IF EXISTS results_match_no_check;
 ALTER TABLE results ADD CONSTRAINT results_match_no_check CHECK(match_no BETWEEN 1 AND 16);
 `);

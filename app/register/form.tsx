@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export default function Form({ lobbyId = "", matchCount = 6 }: { lobbyId?: string; matchCount?: number }) {
+export default function Form({ lobbyId = "", matchCount = 6, maxTeams = 12, multiGroup = false }: { lobbyId?: string; matchCount?: number; maxTeams?: number; multiGroup?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ code: string; whatsappUrl?: string } | null>(null);
@@ -91,7 +91,7 @@ export default function Form({ lobbyId = "", matchCount = 6 }: { lobbyId?: strin
   return (
     <form className="form" onSubmit={submit}>
       <div className="notice">
-        <b>Free Fire only.</b> This is a Free Fire squad scrim with {matchCount} planned matches. Maps are announced by the admin before each match.
+        <b>Free Fire only.</b> This is a Free Fire {multiGroup ? "multi-group event" : "squad scrim"} with {matchCount} planned matches and {maxTeams} total slots. Maps are announced by the admin before each match.
       </div>
 
       {error && <div className="notice danger">{error}</div>}
@@ -116,7 +116,7 @@ export default function Form({ lobbyId = "", matchCount = 6 }: { lobbyId?: strin
         {loading ? "Creating..." : "Register for Free Fire Scrim"}
       </button>
 
-      <p className="small muted">Only these 3 details are required. No Free Fire UID is needed.</p>
+      <p className="small muted">Only these 3 details are required. No Free Fire UID is needed.{multiGroup && " Group assignment is handled by ScrimForge after registration."}</p>
     </form>
   );
 }

@@ -67,7 +67,7 @@ export default function Form({ initialCode = "" }: { initialCode?: string }) {
           <div className="stats">
             <div><small>STATUS</small><b>{status || "PENDING"}</b></div>
             <div><small>PAYMENT</small><b>{result.payment_status || "UNPAID"}</b></div>
-            <div><small>SCRIM</small><b>{result.lobby_title || "Awaiting assignment"}</b></div>
+            <div><small>SCRIM</small><b>{result.lobby_title || "Awaiting assignment"}</b></div>{result.event_type==="TOURNAMENT"&&<div><small>GROUP</small><b>{result.group_name || "Assignment pending"}</b></div>}
             <div><small>CONTACT</small><b>{result.whatsapp || "—"}</b></div>
           </div>
 
