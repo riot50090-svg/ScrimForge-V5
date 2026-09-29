@@ -23,6 +23,11 @@ export async function POST(req:Request){
   await db.query(`insert into lobbies(id,title,game,mode,map,entry_fee,prize_pool,max_teams,match_count,starts_at,schedule_text,rules,event_type,group_size) values($1,$2,'Free Fire','Squad',NULL,$3,$4,$5,$6,$7,$8,$9,$10,12)`,[
     id,x.title,x.entry_fee,x.prize_pool,x.max_teams,x.match_count,startsAt,scheduleText,x.rules||"Free Fire squad event. Maps are announced by admin before each match.",x.event_type
   ]);
-  await db.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status) values($1,$2,1,$3,$4,$5,12,'PENDING')`,[crypto.randomUUID(),id,x.event_type==="TOURNAMENT"?"Qualifiers":"Main Stage",x.match_count,4]);
+  const stageId=crypto.randomUUID();
+  await db.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status) values($1,$2,1,$3,$4,$5,12,'PENDING')`,[stageId,id,x.event_type==="TOURNAMENT"?"Stage 1":"Main Stage",x.match_count,4]);
+  if(x.event_type==="TOURNAMENT"){
+    const groupCount=Math.max(1,Math.ceil(Number(x.max_teams)/12));
+    for(let i=1;i<=groupCount;i++)await db.query(`insert into tournament_groups(id,stage_id,group_no,name,status) values($1,$2,$3,$4,'OPEN') on conflict(stage_id,group_no) do nothing`,[crypto.randomUUID(),stageId,i,`Group ${i}`]);
+  }
   return NextResponse.json({ok:true,id});
 }

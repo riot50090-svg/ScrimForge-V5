@@ -72,10 +72,10 @@ export default function Form({ initialCode = "" }: { initialCode?: string }) {
           </div>
 
           {status === "PENDING" && (
-            <div className="notice">Your registration is received and waiting for admin confirmation.</div>
+            <div className="notice">Your registration is received and waiting for admin confirmation. Your current group is <b>{result.group_name || "being assigned"}</b>.</div>
           )}
           {status === "CONFIRMED" && (
-            <div className="notice">Your team is confirmed. Keep checking this page for the latest scrim information.</div>
+            <div className="notice">Your team is confirmed and assigned to <b>{result.group_name || "its group"}</b>. Keep checking this page for the latest tournament information.</div>
           )}
           {status === "REJECTED" && (
             <div className="notice danger">This registration was rejected. Please contact ScrimForge support if you need help.</div>

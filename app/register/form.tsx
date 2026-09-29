@@ -5,7 +5,7 @@ import { useState } from "react";
 export default function Form({ lobbyId = "", matchCount = 6, maxTeams = 12, multiGroup = false }: { lobbyId?: string; matchCount?: number; maxTeams?: number; multiGroup?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<{ code: string; whatsappUrl?: string } | null>(null);
+  const [result, setResult] = useState<{ code: string; whatsappUrl?: string; group_name?: string | null } | null>(null);
   const [copied, setCopied] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -34,7 +34,7 @@ export default function Form({ lobbyId = "", matchCount = 6, maxTeams = 12, mult
         return;
       }
 
-      setResult({ code: json.code, whatsappUrl: json.whatsappUrl });
+      setResult({ code: json.code, whatsappUrl: json.whatsappUrl, group_name: json.group_name });
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -70,6 +70,10 @@ export default function Form({ lobbyId = "", matchCount = 6, maxTeams = 12, mult
           </button>
         </div>
 
+        {result.group_name && (
+          <div className="notice groupAssigned"><b>GROUP ASSIGNED:</b> {result.group_name}<br/><span className="small">Groups fill in order: Group 1 → Group 2 → Group 3 and so on.</span></div>
+        )}
+
         <div className="success-actions">
           <a className="btn primary check-status-btn" href={`/status?code=${encodeURIComponent(result.code)}`}>
             CHECK STATUS
@@ -82,7 +86,7 @@ export default function Form({ lobbyId = "", matchCount = 6, maxTeams = 12, mult
         </div>
 
         <p className="small muted">
-          Your status starts as <b>Pending</b>. An admin will confirm or reject the registration.
+          Your status starts as <b>Pending</b>. Your tournament group is assigned automatically in registration order. If the registration is rejected, that group slot becomes available again.
         </p>
       </div>
     );
