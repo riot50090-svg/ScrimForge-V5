@@ -15,7 +15,7 @@ export default async function Home(){
       <span className="pill">● FREE FIRE SCRIMS</span>
       <h1>Play the series.<br/><em>Climb.</em> Conquer.</h1>
       <p>ScrimForge is built exclusively for Garena Free Fire squad scrims. Standard scrims can stay at 12 teams, while larger tournaments automatically split into groups of 12 and can advance teams through multiple stages. Maps are announced before each match.</p>
-      <div className="actions"><Link className="btn primary" href="/scrims">View Scrims</Link><Link className="btn" href="/register">Register Team</Link></div>
+      <div className="actions"><Link className="btn primary" href="/scrims">View Scrims</Link></div>
     </section>
     <section className="wrap section">
       <Head a="FREE FIRE MATCH CENTER" b="Upcoming Scrim Sessions" href="/scrims"/>
@@ -32,5 +32,5 @@ export default async function Home(){
     <footer>SCRIMFORGE V5 · FREE FIRE SQUAD SCRIMS.</footer>
   </main>
 }
-function Nav(){return <nav className="nav"><Link href="/" className="brand"><span className="mark">SF</span>ScrimForge <small>V5</small></Link><div className="navRight"><div className="navlinks"><Link href="/scrims">Scrims</Link><Link href="/leaderboard">Leaderboard</Link><Link href="/results">Results</Link><Link href="/rules">Rules</Link><Link href="/status">Status</Link><Link href="/register" className="navcta">Register</Link><Link href="/admin/login">Admin</Link></div><a className="whatsappContact" href="https://wa.me/916307424233" target="_blank" rel="noopener noreferrer">🟢 WhatsApp: +91 63074 24233</a></div></nav>}
+function Nav(){return <nav className="nav"><Link href="/" className="brand"><span className="mark">SF</span>ScrimForge <small>V5</small></Link><div className="navRight"><div className="navlinks"><Link href="/scrims">Scrims</Link><Link href="/leaderboard">Leaderboard</Link><Link href="/results">Results</Link><Link href="/rules">Rules</Link><Link href="/status">Status</Link><Link href="/admin/login">Admin</Link></div><a className="whatsappContact" href="https://wa.me/916307424233" target="_blank" rel="noopener noreferrer">🟢 WhatsApp: +91 63074 24233</a></div></nav>}
 function Head({a,b,href}:{a:string,b:string,href:string}){return <div className="sectionHead"><div><span className="eyebrow">{a}</span><h2>{b}</h2></div><Link href={href}>View all →</Link></div>}
