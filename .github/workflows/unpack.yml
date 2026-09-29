@@ -19,7 +19,7 @@ jobs:
       - name: Check ZIP
         id: check
         run: |
-          if [ -f "ScrimForge-V5-ADMIN-CONTROLS-UPDATE-1.zip" ]; then
+          if [ -f "ScrimForge-V5-REGISTRATION-ACCEPT-REJECT-UPDATE.zip" ]; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
@@ -31,14 +31,14 @@ jobs:
           rm -rf _extract
           mkdir _extract
 
-          unzip -q "ScrimForge-V5-ADMIN-CONTROLS-UPDATE-1.zip" -d _extract
+          unzip -q "ScrimForge-V5-REGISTRATION-ACCEPT-REJECT-UPDATE.zip" -d _extract
 
           ROOT="_extract/ScrimForge-V5-COMPLETE"
 
           cp -R "$ROOT"/. .
 
           rm -rf _extract
-          rm -f "ScrimForge-V5-ADMIN-CONTROLS-UPDATE-1.zip"
+          rm -f "ScrimForge-V5-REGISTRATION-ACCEPT-REJECT-UPDATE.zip"
 
           rm -rf .github
 
