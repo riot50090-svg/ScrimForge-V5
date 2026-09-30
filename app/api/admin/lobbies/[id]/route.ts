@@ -34,6 +34,17 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
    const gs=await db.query(`select g.id,g.group_no,g.name,count(e.id)::int team_count from tournament_groups g left join tournament_entries e on e.group_id=g.id and e.status<>'REJECTED' where g.stage_id=$1 group by g.id,g.group_no,g.name order by g.group_no`,[stage.id]);
    return NextResponse.json({ok:true,groups:gs.rows});
  }
+ if(b.action==="update_stage_settings"){
+   const stageNo=Number(b.stage_no||1);
+   const stageQ=Math.max(1,Number(b.qualify_per_group||1));
+   const stageM=Math.max(1,Number(b.match_count||1));
+   const s=await db.query(`select id,group_size from tournament_stages where lobby_id=$1 and stage_no=$2`,[id,stageNo]);
+   if(!s.rows.length)return NextResponse.json({error:"Stage not found"},{status:404});
+   const groupSize=Number(s.rows[0].group_size||12);
+   if(stageQ>groupSize)return NextResponse.json({error:`Qualifiers per group cannot exceed the group size (${groupSize}).`},{status:400});
+   await db.query(`update tournament_stages set qualify_per_group=$2,match_count=$3 where id=$1`,[s.rows[0].id,stageQ,stageM]);
+   return NextResponse.json({ok:true,qualify_per_group:stageQ,match_count:stageM});
+ }
  if(b.action==="advance_stage"){
    const l=await db.query(`select * from lobbies where id=$1`,[id]);if(!l.rows.length)return NextResponse.json({error:"Scrim not found"},{status:404});
    const stageNo=Number(b.stage_no||1),s=await db.query(`select * from tournament_stages where lobby_id=$1 and stage_no=$2`,[id,stageNo]);if(!s.rows.length)return NextResponse.json({error:"Stage not found"},{status:404});
@@ -66,7 +77,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
      await db.query(`update tournament_entries set qualified=false,status='ELIMINATED' where stage_id=$1`,[stage.id]);
      for(const q of qualifiers)await db.query(`update tournament_entries set qualified=true,status='QUALIFIED',final_rank=$2 where id=$1`,[q.entry_id,q.rank]);
      const nextStageId=crypto.randomUUID();
-     await db.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,'each_group','qualified')`,[nextStageId,id,nextNo,nextName,Number(b.next_match_count||stage.match_count||2),Math.max(1,Number(b.next_qualify_per_group||Math.floor(nextSize/2))),nextSize,nextMode,stageNo]);
+     await db.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,'each_group','qualified')`,[nextStageId,id,nextNo,nextName,Number(b.next_match_count||stage.match_count||2),Math.max(1,Math.min(nextSize,Number(b.next_qualify_per_group||Math.floor(nextSize/2)))),nextSize,nextMode,stageNo]);
      for(let i=0;i<nextGroups;i++)await db.query(`insert into tournament_groups(id,stage_id,group_no,name,status) values($1,$2,$3,$4,'OPEN')`,[crypto.randomUUID(),nextStageId,i+1,`Group ${i+1}`]);
      const ng=await db.query(`select id,group_no from tournament_groups where stage_id=$1 order by group_no`,[nextStageId]);
      let seeded=[...qualifiers];
