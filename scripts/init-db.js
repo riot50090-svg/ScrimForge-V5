@@ -17,11 +17,11 @@ ALTER TABLE results ADD COLUMN IF NOT EXISTS match_no int NOT NULL DEFAULT 1;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS stage_no int NOT NULL DEFAULT 1;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS group_no int NOT NULL DEFAULT 1;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS group_id text;
-CREATE TABLE IF NOT EXISTS tournament_stages(id text primary key,lobby_id text references lobbies(id) on delete cascade,stage_no int not null,name text not null,match_count int not null default 2,qualify_per_group int not null default 4,group_size int not null default 12,status text default 'PENDING',created_at timestamptz default now(),completed_at timestamptz,unique(lobby_id,stage_no));
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS distribution_mode text NOT NULL DEFAULT 'balanced';
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS source_stage_no int;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS qualification_mode text NOT NULL DEFAULT 'each_group';
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS source_pool text NOT NULL DEFAULT 'qualified';
+CREATE TABLE IF NOT EXISTS tournament_stages(id text primary key,lobby_id text references lobbies(id) on delete cascade,stage_no int not null,name text not null,match_count int not null default 2,qualify_per_group int not null default 4,group_size int not null default 12,status text default 'PENDING',created_at timestamptz default now(),completed_at timestamptz,unique(lobby_id,stage_no));
 CREATE TABLE IF NOT EXISTS tournament_groups(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_no int not null,name text not null,status text default 'OPEN',unique(stage_id,group_no));
 CREATE TABLE IF NOT EXISTS tournament_entries(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_id text references tournament_groups(id) on delete cascade,registration_id text references registrations(id) on delete cascade,team_name text not null,seed int,status text default 'ACTIVE',final_rank int,qualified boolean default false,created_at timestamptz default now(),unique(stage_id,registration_id));
 
