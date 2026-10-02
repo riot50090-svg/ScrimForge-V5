@@ -17,11 +17,14 @@ ALTER TABLE results ADD COLUMN IF NOT EXISTS match_no int NOT NULL DEFAULT 1;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS stage_no int NOT NULL DEFAULT 1;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS group_no int NOT NULL DEFAULT 1;
 ALTER TABLE results ADD COLUMN IF NOT EXISTS group_id text;
+CREATE TABLE IF NOT EXISTS tournament_stages(id text primary key,lobby_id text references lobbies(id) on delete cascade,stage_no int not null,name text not null,match_count int not null default 2,qualify_per_group int not null default 4,group_size int not null default 12,status text default 'PENDING',created_at timestamptz default now(),completed_at timestamptz,unique(lobby_id,stage_no));
+CREATE TABLE IF NOT EXISTS tournament_groups(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_no int not null,name text not null,status text default 'OPEN',unique(stage_id,group_no));
+CREATE TABLE IF NOT EXISTS tournament_entries(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_id text references tournament_groups(id) on delete cascade,registration_id text references registrations(id) on delete cascade,team_name text not null,seed int,status text default 'ACTIVE',final_rank int,qualified boolean default false,created_at timestamptz default now(),unique(stage_id,registration_id));
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS distribution_mode text NOT NULL DEFAULT 'balanced';
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS source_stage_no int;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS qualification_mode text NOT NULL DEFAULT 'each_group';
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS source_pool text NOT NULL DEFAULT 'qualified';
-ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_match_count int;
+ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_match_count int DEFAULT 1;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_group_count int;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_group_size int;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_stage_name text;
@@ -29,9 +32,7 @@ ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_qualification_mode t
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_qualify_per_group int;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_qualify_total int;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_distribution_mode text;
-CREATE TABLE IF NOT EXISTS tournament_stages(id text primary key,lobby_id text references lobbies(id) on delete cascade,stage_no int not null,name text not null,match_count int not null default 2,qualify_per_group int not null default 4,group_size int not null default 12,status text default 'PENDING',created_at timestamptz default now(),completed_at timestamptz,unique(lobby_id,stage_no));
-CREATE TABLE IF NOT EXISTS tournament_groups(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_no int not null,name text not null,status text default 'OPEN',unique(stage_id,group_no));
-CREATE TABLE IF NOT EXISTS tournament_entries(id text primary key,stage_id text references tournament_stages(id) on delete cascade,group_id text references tournament_groups(id) on delete cascade,registration_id text references registrations(id) on delete cascade,team_name text not null,seed int,status text default 'ACTIVE',final_rank int,qualified boolean default false,created_at timestamptz default now(),unique(stage_id,registration_id));
+UPDATE tournament_stages SET next_match_count=1 WHERE next_match_count IS NULL;
 
 UPDATE lobbies SET game='Free Fire',mode='Squad',map=NULL,match_count=COALESCE(match_count,6),event_type=COALESCE(event_type,'SCRIM'),group_size=COALESCE(group_size,12),current_stage=COALESCE(current_stage,1) WHERE game IS NULL OR game<>'Free Fire' OR mode<>'Squad' OR map IS NOT NULL OR match_count IS NULL;
 ALTER TABLE lobbies DROP CONSTRAINT IF EXISTS lobbies_match_count_check;

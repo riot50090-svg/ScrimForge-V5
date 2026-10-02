@@ -85,14 +85,14 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
      await client.query(`update tournament_entries set qualified=false,status='ELIMINATED' where stage_id=$1`,[stage.id]);
      for(const q of qualifiers)await client.query(`update tournament_entries set qualified=true,status='QUALIFIED',final_rank=$2 where id=$1`,[q.entry_id,q.rank]);
      const nextStageId=crypto.randomUUID();
-     await client.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,'each_group','qualified')`,[nextStageId,id,nextNo,nextName,Math.max(1,Math.min(16,Number(b.next_match_count||stage.next_match_count||2))),Math.max(1,Number(b.next_qualify_per_group||stage.next_qualify_per_group||Math.floor(nextSize/2))),nextSize,nextMode,stageNo]);
+     await client.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,$10,'qualified')`,[nextStageId,id,nextNo,nextName,Math.max(1,Math.min(16,Number(b.next_match_count ?? stage.next_match_count ?? 1))),Math.max(1,Number(b.next_qualify_per_group||stage.next_qualify_per_group||Math.floor(nextSize/2))),nextSize,nextMode,stageNo,mode]);
      for(let i=0;i<nextGroups;i++)await client.query(`insert into tournament_groups(id,stage_id,group_no,name,status) values($1,$2,$3,$4,'OPEN')`,[crypto.randomUUID(),nextStageId,i+1,`Group ${i+1}`]);
      const ng=await client.query(`select id,group_no from tournament_groups where stage_id=$1 order by group_no`,[nextStageId]);
      let seeded=[...qualifiers];
      if(nextMode==='random')seeded.sort(()=>Math.random()-0.5);else seeded.sort((a:any,b:any)=>Number(b.total_points)-Number(a.total_points)||Number(b.booyahs)-Number(a.booyahs)||Number(b.kill_points)-Number(a.kill_points)||a.team_name.localeCompare(b.team_name));
      for(let i=0;i<seeded.length;i++){
        let g;if(nextMode==='snake'){const round=Math.floor(i/ng.rows.length),pos=i%ng.rows.length;g=ng.rows[round%2===0?pos:ng.rows.length-1-pos]}else g=ng.rows[i%ng.rows.length];
-       await client.query(`insert into tournament_entries(id,stage_id,group_id,registration_id,team_name,seed,status) values($1,$2,$3,$4,$5,$6,'ACTIVE')`,[crypto.randomUUID(),nextStageId,g.id,seeded[i].registration_id,i+1]);
+       await client.query(`insert into tournament_entries(id,stage_id,group_id,registration_id,team_name,seed,status) values($1,$2,$3,$4,$5,$6,'ACTIVE')`,[crypto.randomUUID(),nextStageId,g.id,seeded[i].registration_id,seeded[i].team_name,i+1]);
      }
      await client.query(`update lobbies set current_stage=$2 where id=$1`,[id,nextNo]);
      await client.query(`insert into audit_logs(id,action,detail) values($1,'STAGE_ADVANCED',$2)`,[crypto.randomUUID(),`${l.rows[0].title} · Stage ${stageNo} → ${nextNo} · ${qualifiers.length} qualified · ${nextGroups} groups × ${nextSize}`]);
