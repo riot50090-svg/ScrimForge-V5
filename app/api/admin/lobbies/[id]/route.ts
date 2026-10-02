@@ -6,7 +6,7 @@ async function standings(stageId:string,groupId:string){
  coalesce(sum(case when r.placement=1 then 1 else 0 end),0)::int booyahs,
  coalesce(sum(case when r.placement=1 then 12 when r.placement=2 then 9 when r.placement=3 then 8 when r.placement=4 then 7 when r.placement=5 then 6 when r.placement=6 then 5 when r.placement=7 then 4 when r.placement=8 then 3 when r.placement=9 then 2 when r.placement=10 then 1 else 0 end),0)::int placement_points,
  count(r.id)::int matches_played
- from tournament_entries e left join results r on r.team_name=e.team_name and r.stage_no=(select stage_no from tournament_stages where id=$1) and r.group_id=$2
+ from tournament_entries e left join results r on r.team_name=e.team_name and r.stage_no=(select stage_no from tournament_stages where id=$1) and (r.group_id=$2 or (r.group_id is null and r.group_no=(select group_no from tournament_groups where id=$2)))
  where e.stage_id=$1 and e.group_id=$2 group by e.id,e.team_name,e.registration_id order by total_points desc,booyahs desc,kill_points desc,e.team_name asc`,[stageId,groupId]);
  return q.rows.map((x:any,i:number)=>({...x,rank:i+1}));
 }
@@ -61,7 +61,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
    const qualifiers:any[]=[];
    for(const g of gs.rows){
      const rows=await standings(stage.id,g.id);if(!rows.length)return NextResponse.json({error:`No teams found in ${g.name}.`},{status:400});
-     const coverage=await db.query(`select team_name,count(distinct match_no)::int matches from results where lobby_id=$1 and stage_no=$2 and group_id=$3 group by team_name`,[id,stageNo,g.id]);
+     const coverage=await db.query(`select team_name,count(distinct match_no)::int matches from results where lobby_id=$1 and stage_no=$2 and (group_id=$3 or (group_id is null and group_no=$4)) group by team_name`,[id,stageNo,g.id,g.group_no]);
      const covered=new Map(coverage.rows.map((x:any)=>[x.team_name,Number(x.matches)]));
      const missing=rows.filter((r:any)=>Number(covered.get(r.team_name)||0)<Number(stage.match_count||1));
      if(missing.length)return NextResponse.json({error:`${g.name} is not complete. Enter all ${stage.match_count} match results for every team before advancing.`},{status:400});
