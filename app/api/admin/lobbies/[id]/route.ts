@@ -52,6 +52,35 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
      await db.query("commit");return NextResponse.json({ok:true,groups:count});
    }catch(e){await db.query("rollback");throw e}
  }
+ if(b.action==="create_qualification_pool"){
+  const stageNo=Number(b.stage_no||1),total=Math.max(1,Number(b.qualify_total||0));
+  const s=await db.query(`select * from tournament_stages where lobby_id=$1 and stage_no=$2`,[id,stageNo]);
+  if(!s.rows.length)return NextResponse.json({error:"Stage not found"},{status:404});
+  const stage=s.rows[0],gs=await db.query(`select id,group_no,name from tournament_groups where stage_id=$1 order by group_no`,[stage.id]);
+  if(!gs.rows.length)return NextResponse.json({error:"No groups found for this stage."},{status:400});
+  const existing=await db.query(`select id from tournament_pools where lobby_id=$1 and source_stage_no=$2 and role='QUALIFICATION' and status='OPEN'`,[id,stageNo]);
+  if(existing.rows.length)return NextResponse.json({error:"A qualification pool already exists for this stage."},{status:409});
+  const all:any[]=[];
+  for(const g of gs.rows){
+    const rows=await standings(stage.id,g.id);if(!rows.length)return NextResponse.json({error:`No teams found in ${g.name}.`},{status:400});
+    const coverage=await db.query(`select team_name,count(distinct match_no)::int matches from results where lobby_id=$1 and stage_no=$2 and (group_id=$3 or (group_id is null and group_no=$4)) group by team_name`,[id,stageNo,g.id,g.group_no]);
+    const covered=new Map(coverage.rows.map((x:any)=>[x.team_name,Number(x.matches)]));
+    const missing=rows.filter((r:any)=>Number(covered.get(r.team_name)||0)<Number(stage.match_count||1));
+    if(missing.length)return NextResponse.json({error:`${g.name} is not complete. Enter all ${stage.match_count} match results for every team before creating the qualification pool.`},{status:400});
+    all.push(...rows);
+  }
+  all.sort((a:any,b:any)=>Number(b.total_points)-Number(a.total_points)||Number(b.booyahs)-Number(a.booyahs)||Number(b.kill_points)-Number(a.kill_points)||a.team_name.localeCompare(b.team_name));
+  if(total>=all.length)return NextResponse.json({error:`Select fewer than all ${all.length} teams to create a qualification pool.`},{status:400});
+  const selected=all.slice(0,total),poolId=crypto.randomUUID(),l=await db.query(`select title from lobbies where id=$1`,[id]);
+  const client=await db.connect();try{await client.query("begin");
+    await client.query(`insert into tournament_pools(id,lobby_id,source_stage_no,name,role,status) values($1,$2,$3,$4,'QUALIFICATION','OPEN')`,[poolId,id,stageNo,`${b.pool_name||`Top ${total} Qualification Pool`}`]);
+    await client.query(`update tournament_stages set status='COMPLETED',completed_at=now(),qualification_mode='top_overall',qualify_per_group=$2 where id=$1`,[stage.id,total]);
+    await client.query(`update tournament_entries set qualified=false,status='ELIMINATED' where stage_id=$1`,[stage.id]);
+    for(let i=0;i<selected.length;i++){const q=selected[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),poolId,q.registration_id,q.team_name,i+1]);await client.query(`update tournament_entries set qualified=true,status='QUALIFIED',final_rank=$2 where stage_id=$1 and registration_id=$3`,[stage.id,i+1,q.registration_id]);}
+    await client.query(`insert into audit_logs(id,action,detail) values($1,'QUALIFICATION_POOL_CREATED',$2)`,[crypto.randomUUID(),`${l.rows[0].title} · Stage ${stageNo} · Top ${selected.length} qualification pool created from ${all.length} teams`]);
+    await client.query("commit");return NextResponse.json({ok:true,pool_id:poolId,qualified:selected.length,total:all.length});
+  }catch(e){try{await client.query("rollback")}catch{}throw e}finally{client.release()}
+ }
  if(b.action==="advance_stage"){
   try{
    const l=await db.query(`select * from lobbies where id=$1`,[id]);if(!l.rows.length)return NextResponse.json({error:"Scrim not found"},{status:404});
@@ -61,7 +90,8 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
    const mode=String(b.qualification_mode||"each_group");
    const qualify=Math.max(1,Number(b.qualify_per_group||stage.qualify_per_group||1));
    const qualifiers:any[]=[];
-   for(const g of gs.rows){
+   const poolSourceId=mode==="split"?String(b.source_pool_id||""):"";
+   if(!(mode==="split"&&poolSourceId)) for(const g of gs.rows){
      const rows=await standings(stage.id,g.id);if(!rows.length)return NextResponse.json({error:`No teams found in ${g.name}.`},{status:400});
      const coverage=await db.query(`select team_name,count(distinct match_no)::int matches from results where lobby_id=$1 and stage_no=$2 and (group_id=$3 or (group_id is null and group_no=$4)) group by team_name`,[id,stageNo,g.id,g.group_no]);
      const covered=new Map(coverage.rows.map((x:any)=>[x.team_name,Number(x.matches)]));
@@ -76,8 +106,15 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
    }
    if(mode==="split") {
      const directCount=Math.max(1,Number(b.direct_qualifiers||0));
-     const all=gs.rows.flatMap((g:any)=>g._rows||[]);
-     all.sort((a:any,b:any)=>Number(b.total_points)-Number(a.total_points)||Number(b.booyahs)-Number(a.booyahs)||Number(b.kill_points)-Number(a.kill_points)||a.team_name.localeCompare(b.team_name));
+     let all:any[]=[];
+     if(poolSourceId){
+       const pool=await db.query(`select p.id,p.source_stage_no,p.role,pe.registration_id,pe.team_name,pe.rank from tournament_pools p join tournament_pool_entries pe on pe.pool_id=p.id where p.id=$1 and p.lobby_id=$2 and p.source_stage_no=$3 and p.role='QUALIFICATION' and p.status='OPEN' order by pe.rank`,[poolSourceId,id,stageNo]);
+       if(!pool.rows.length)return NextResponse.json({error:"Qualification pool not found for this stage."},{status:404});
+       all=pool.rows.map((x:any)=>({registration_id:x.registration_id,team_name:x.team_name,rank:x.rank,total_points:0,booyahs:0,kill_points:0}));
+     }else{
+       all=gs.rows.flatMap((g:any)=>g._rows||[]);
+       all.sort((a:any,b:any)=>Number(b.total_points)-Number(a.total_points)||Number(b.booyahs)-Number(a.booyahs)||Number(b.kill_points)-Number(a.kill_points)||a.team_name.localeCompare(b.team_name));
+     }
      if(directCount>=all.length)return NextResponse.json({error:`Split needs at least one Last Chance team. ${all.length} teams are available, but ${directCount} direct finalists were selected.`},{status:400});
      const direct=all.slice(0,directCount), remaining=all.slice(directCount);
      const nextNo=stageNo+1;const nextExisting=await db.query(`select id from tournament_stages where lobby_id=$1 and stage_no=$2`,[id,nextNo]);if(nextExisting.rows.length)return NextResponse.json({error:"The next stage already exists."},{status:409});
@@ -92,8 +129,9 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
        await client.query(`update tournament_entries set qualified=false,status='ELIMINATED' where stage_id=$1`,[stage.id]);
        const directPoolId=crypto.randomUUID(),remainPoolId=crypto.randomUUID();
        await client.query(`insert into tournament_pools(id,lobby_id,source_stage_no,name,role,status) values($1,$2,$3,$4,'DIRECT_FINALISTS','OPEN'),($5,$2,$3,$6,'REMAINING','OPEN')`,[directPoolId,id,stageNo,`Direct Finalists`,remainPoolId,`Last Chance Pool`]);
-       for(let i=0;i<direct.length;i++){const q=direct[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),directPoolId,q.registration_id,q.team_name,q.rank]);await client.query(`update tournament_entries set qualified=true,status='QUALIFIED',final_rank=$2 where id=$1`,[q.entry_id,q.rank]);}
-       for(let i=0;i<remaining.length;i++){const q=remaining[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),remainPoolId,q.registration_id,q.team_name,q.rank]);await client.query(`update tournament_entries set qualified=false,status='REMAINING',final_rank=$2 where id=$1`,[q.entry_id,q.rank]);}
+       if(poolSourceId)await client.query(`update tournament_pools set status='CONSUMED' where id=$1`,[poolSourceId]);
+       for(let i=0;i<direct.length;i++){const q=direct[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),directPoolId,q.registration_id,q.team_name,i+1]);await client.query(`update tournament_entries set qualified=true,status='QUALIFIED',final_rank=$2 where stage_id=$1 and registration_id=$3`,[stage.id,i+1,q.registration_id]);}
+       for(let i=0;i<remaining.length;i++){const q=remaining[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),remainPoolId,q.registration_id,q.team_name,direct.length+i+1]);await client.query(`update tournament_entries set qualified=false,status='REMAINING',final_rank=$2 where stage_id=$1 and registration_id=$3`,[stage.id,direct.length+i+1,q.registration_id]);}
        const nextStageId=crypto.randomUUID();
        await client.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool,source_pool_id) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,'each_group','remaining',$10)`,[nextStageId,id,nextNo,nextName,Math.max(1,Math.min(16,Number(b.next_match_count??stage.next_match_count??1))),splitQual,nextSize,nextMode,stageNo,remainPoolId]);
        for(let i=0;i<nextGroups;i++)await client.query(`insert into tournament_groups(id,stage_id,group_no,name,status) values($1,$2,$3,$4,'OPEN')`,[crypto.randomUUID(),nextStageId,i+1,`Group ${i+1}`]);
