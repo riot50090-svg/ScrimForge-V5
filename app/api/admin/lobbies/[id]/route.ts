@@ -73,13 +73,35 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
   if(total>=all.length)return NextResponse.json({error:`Select fewer than all ${all.length} teams to create a qualification pool.`},{status:400});
   const selected=all.slice(0,total),poolId=crypto.randomUUID(),l=await db.query(`select title from lobbies where id=$1`,[id]);
   const client=await db.connect();try{await client.query("begin");
-    await client.query(`insert into tournament_pools(id,lobby_id,source_stage_no,name,role,status) values($1,$2,$3,$4,'QUALIFICATION','OPEN')`,[poolId,id,stageNo,`${b.pool_name||`Top ${total} Qualification Pool`}`]);
-    await client.query(`update tournament_stages set status='COMPLETED',completed_at=now(),qualification_mode='top_overall',qualify_per_group=$2 where id=$1`,[stage.id,total]);
+    await client.query(`insert into tournament_pools(id,lobby_id,source_stage_no,name,role,status,previous_qualify_per_group) values($1,$2,$3,$4,'QUALIFICATION','OPEN',$5)`,[poolId,id,stageNo,`${b.pool_name||`Top ${total} Qualification Pool`}`,Number(stage.qualify_per_group||1)]);
+    await client.query(`update tournament_stages set status='COMPLETED',completed_at=now(),qualification_mode='top_overall' where id=$1`,[stage.id]);
     await client.query(`update tournament_entries set qualified=false,status='ELIMINATED' where stage_id=$1`,[stage.id]);
     for(let i=0;i<selected.length;i++){const q=selected[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),poolId,q.registration_id,q.team_name,i+1]);await client.query(`update tournament_entries set qualified=true,status='QUALIFIED',final_rank=$2 where stage_id=$1 and registration_id=$3`,[stage.id,i+1,q.registration_id]);}
     await client.query(`insert into audit_logs(id,action,detail) values($1,'QUALIFICATION_POOL_CREATED',$2)`,[crypto.randomUUID(),`${l.rows[0].title} · Stage ${stageNo} · Top ${selected.length} qualification pool created from ${all.length} teams`]);
     await client.query("commit");return NextResponse.json({ok:true,pool_id:poolId,qualified:selected.length,total:all.length});
   }catch(e){try{await client.query("rollback")}catch{}throw e}finally{client.release()}
+ }
+ if(b.action==="reset_qualification_pool") {
+  try {
+    const stageNo=Number(b.stage_no||0);
+    const p=await db.query(`select id,name,previous_qualify_per_group from tournament_pools where lobby_id=$1 and source_stage_no=$2 and role='QUALIFICATION' and status='OPEN' order by created_at desc limit 1`,[id,stageNo]);
+    if(!p.rows.length)return NextResponse.json({error:"No open qualification pool exists for this stage."},{status:404});
+    const s=await db.query(`select id,name from tournament_stages where lobby_id=$1 and stage_no=$2`,[id,stageNo]);
+    if(!s.rows.length)return NextResponse.json({error:"Stage not found."},{status:404});
+    const later=await db.query(`select stage_no from tournament_stages where lobby_id=$1 and stage_no>$2 limit 1`,[id,stageNo]);
+    if(later.rows.length)return NextResponse.json({error:`Stage ${later.rows[0].stage_no} already exists. Delete that later stage before resetting this qualification pool.`},{status:400});
+    const client=await db.connect();
+    try {
+      await client.query("begin");
+      await client.query(`delete from tournament_pools where id=$1`,[p.rows[0].id]);
+      await client.query(`update tournament_entries set qualified=false,status='ACTIVE',final_rank=null where stage_id=$1`,[s.rows[0].id]);
+      await client.query(`update tournament_stages set status='LIVE',completed_at=null,qualification_mode='each_group',qualify_per_group=$2 where id=$1`,[s.rows[0].id,Math.max(1,Number(p.rows[0].previous_qualify_per_group||1))]);
+      const l=await client.query(`select title from lobbies where id=$1`,[id]);
+      await client.query(`insert into audit_logs(id,action,detail) values($1,'QUALIFICATION_POOL_RESET',$2)`,[crypto.randomUUID(),`${l.rows[0]?.title||id} · Stage ${stageNo} · qualification pool reset`]);
+      await client.query("commit");
+      return NextResponse.json({ok:true,stage_no:stageNo});
+    }catch(e){try{await client.query("rollback")}catch{}throw e}finally{client.release()}
+  }catch(e:any){console.error("RESET QUALIFICATION POOL ERROR",e);return NextResponse.json({error:e?.message||"Could not reset the qualification pool."},{status:500})}
  }
  if(b.action==="advance_stage"){
   try{

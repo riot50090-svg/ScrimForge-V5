@@ -33,7 +33,8 @@ ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_qualify_per_group in
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_qualify_total int;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS next_distribution_mode text;
 ALTER TABLE tournament_stages ADD COLUMN IF NOT EXISTS source_pool_id text;
-CREATE TABLE IF NOT EXISTS tournament_pools(id text primary key,lobby_id text references lobbies(id) on delete cascade,source_stage_no int not null,name text not null,role text not null,status text default 'OPEN',created_at timestamptz default now());
+CREATE TABLE IF NOT EXISTS tournament_pools(id text primary key,lobby_id text references lobbies(id) on delete cascade,source_stage_no int not null,name text not null,role text not null,status text default 'OPEN',previous_qualify_per_group int,created_at timestamptz default now());
+ALTER TABLE tournament_pools ADD COLUMN IF NOT EXISTS previous_qualify_per_group int;
 CREATE TABLE IF NOT EXISTS tournament_pool_entries(id text primary key,pool_id text references tournament_pools(id) on delete cascade,registration_id text references registrations(id) on delete cascade,team_name text not null,rank int,created_at timestamptz default now(),unique(pool_id,registration_id));
 UPDATE tournament_stages SET next_match_count=1 WHERE next_match_count IS NULL;
 
