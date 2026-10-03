@@ -146,6 +146,29 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
      const nextMode=["balanced","random","snake"].includes(String(b.next_distribution_mode))?String(b.next_distribution_mode):"balanced",nextName=String(b.next_stage_name||"Grand Final").trim()||"Grand Final";const client=await db.connect();try{await client.query("begin");await client.query(`update tournament_stages set status='COMPLETED',completed_at=now() where id=$1`,[stage.id]);const nextId=crypto.randomUUID();await client.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,'each_group','merged')`,[nextId,id,nextNo,nextName,Math.max(1,Math.min(16,Number(b.next_match_count||1))),Math.max(1,Number(b.next_qualify_per_group||finalTeams.length)),nextSize,nextMode,stageNo]);for(let i=0;i<nextGroups;i++)await client.query(`insert into tournament_groups(id,stage_id,group_no,name,status) values($1,$2,$3,$4,'OPEN')`,[crypto.randomUUID(),nextId,i+1,`Group ${i+1}`]);const ng=await client.query(`select id,group_no from tournament_groups where stage_id=$1 order by group_no`,[nextId]);let seeded=[...finalTeams];if(nextMode==='random')seeded.sort(()=>Math.random()-0.5);for(let i=0;i<seeded.length;i++){const g=ng.rows[i%ng.rows.length];await client.query(`insert into tournament_entries(id,stage_id,group_id,registration_id,team_name,seed,status) values($1,$2,$3,$4,$5,$6,'ACTIVE')`,[crypto.randomUUID(),nextId,g.id,seeded[i].registration_id,seeded[i].team_name,i+1]);}await client.query(`update lobbies set current_stage=$2 where id=$1`,[id,nextNo]);await client.query(`insert into audit_logs(id,action,detail) values($1,'STAGE_MERGED',$2)`,[crypto.randomUUID(),`${l.rows[0].title} · Last Chance Stage ${stageNo} → ${nextNo} · ${finalTeams.length} merged final teams`]);await client.query("commit");return NextResponse.json({ok:true,next_stage:nextNo,teams:finalTeams.length});}catch(e){try{await client.query("rollback")}catch{}throw e}finally{client.release()}
    }catch(e:any){console.error("MERGE FINAL ERROR",e);return NextResponse.json({error:e?.message||"Could not create merged final."},{status:500})}
  }
+ if(b.action==="delete_stage") {
+   try {
+     const stageNo=Number(b.stage_no||0);
+     if(stageNo<=1)return NextResponse.json({error:"Stage 1 is the base stage and cannot be deleted."},{status:400});
+     const latest=await db.query(`select id,stage_no,name,source_pool_id from tournament_stages where lobby_id=$1 order by stage_no desc limit 1`,[id]);
+     if(!latest.rows.length)return NextResponse.json({error:"No tournament stages found."},{status:404});
+     const stage=latest.rows[0];
+     if(Number(stage.stage_no)!==stageNo)return NextResponse.json({error:`Only the latest stage can be deleted. Delete Stage ${stage.stage_no} first.`},{status:400});
+     const l=await db.query(`select title from lobbies where id=$1`,[id]);
+     const client=await db.connect();
+     try {
+       await client.query("begin");
+       await client.query(`delete from results where lobby_id=$1 and stage_no=$2`,[id,stageNo]);
+       await client.query(`delete from tournament_stages where id=$1`,[stage.id]);
+       if(stage.source_pool_id)await client.query(`delete from tournament_pools where id=$1`,[stage.source_pool_id]);
+       const previous=await client.query(`select coalesce(max(stage_no),1)::int stage_no from tournament_stages where lobby_id=$1`,[id]);
+       await client.query(`update lobbies set current_stage=$2 where id=$1`,[id,previous.rows[0].stage_no]);
+       await client.query(`insert into audit_logs(id,action,detail) values($1,'STAGE_DELETED',$2)`,[crypto.randomUUID(),`${l.rows[0]?.title||id} · Stage ${stageNo} · ${stage.name}`]);
+       await client.query("commit");
+       return NextResponse.json({ok:true,deleted_stage:stageNo,current_stage:previous.rows[0].stage_no});
+     }catch(e){try{await client.query("rollback")}catch{}throw e}finally{client.release()}
+   }catch(e:any){console.error("DELETE STAGE ERROR",e);return NextResponse.json({error:e?.message||"Could not delete the stage."},{status:500})}
+ }
  if(b.action==="complete_stage"){
    const stageNo=Number(b.stage_no||1);await db.query(`update tournament_stages set status='COMPLETED',completed_at=now() where lobby_id=$1 and stage_no=$2`,[id,stageNo]);return NextResponse.json({ok:true});
  }
