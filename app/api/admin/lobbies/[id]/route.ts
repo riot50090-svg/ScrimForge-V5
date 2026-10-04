@@ -155,7 +155,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
        for(let i=0;i<direct.length;i++){const q=direct[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),directPoolId,q.registration_id,q.team_name,i+1]);await client.query(`update tournament_entries set qualified=true,status='QUALIFIED',final_rank=$2 where stage_id=$1 and registration_id=$3`,[stage.id,i+1,q.registration_id]);}
        for(let i=0;i<remaining.length;i++){const q=remaining[i];await client.query(`insert into tournament_pool_entries(id,pool_id,registration_id,team_name,rank) values($1,$2,$3,$4,$5)`,[crypto.randomUUID(),remainPoolId,q.registration_id,q.team_name,direct.length+i+1]);await client.query(`update tournament_entries set qualified=false,status='REMAINING',final_rank=$2 where stage_id=$1 and registration_id=$3`,[stage.id,direct.length+i+1,q.registration_id]);}
        const nextStageId=crypto.randomUUID();
-       await client.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool,source_pool_id) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,'each_group','remaining',$10)`,[nextStageId,id,nextNo,nextName,Math.max(1,Math.min(16,Number(b.next_match_count??stage.next_match_count??1))),splitQual,nextSize,nextMode,stageNo,remainPoolId]);
+       await client.query(`insert into tournament_stages(id,lobby_id,stage_no,name,match_count,qualify_per_group,group_size,status,distribution_mode,source_stage_no,qualification_mode,source_pool,source_pool_id,direct_pool_id) values($1,$2,$3,$4,$5,$6,$7,'LIVE',$8,$9,'each_group','remaining',$10,$11)`,[nextStageId,id,nextNo,nextName,Math.max(1,Math.min(16,Number(b.next_match_count??stage.next_match_count??1))),splitQual,nextSize,nextMode,stageNo,remainPoolId,directPoolId]);
        for(let i=0;i<nextGroups;i++)await client.query(`insert into tournament_groups(id,stage_id,group_no,name,status) values($1,$2,$3,$4,'OPEN')`,[crypto.randomUUID(),nextStageId,i+1,`Group ${i+1}`]);
        const ng=await client.query(`select id,group_no from tournament_groups where stage_id=$1 order by group_no`,[nextStageId]);let seeded=[...remaining];
        if(nextMode==='random')seeded.sort(()=>Math.random()-0.5);else seeded.sort((a:any,b:any)=>Number(b.total_points)-Number(a.total_points)||Number(b.booyahs)-Number(a.booyahs)||Number(b.kill_points)-Number(a.kill_points)||a.team_name.localeCompare(b.team_name));
@@ -194,7 +194,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
    try {
      const l=await db.query(`select * from lobbies where id=$1`,[id]);if(!l.rows.length)return NextResponse.json({error:"Scrim not found"},{status:404});
      const stageNo=Number(b.stage_no||1),s=await db.query(`select * from tournament_stages where lobby_id=$1 and stage_no=$2`,[id,stageNo]);if(!s.rows.length)return NextResponse.json({error:"Stage not found"},{status:404});
-     const stage=s.rows[0],poolId=String(b.direct_pool_id||stage.source_pool_id||"");if(!poolId)return NextResponse.json({error:"No direct finalist pool is linked to this stage."},{status:400});
+     const stage=s.rows[0],poolId=String(b.direct_pool_id||stage.direct_pool_id||"");if(!poolId)return NextResponse.json({error:"No direct finalist pool is linked to this stage."},{status:400});
      const direct=await db.query(`select registration_id,team_name,rank from tournament_pool_entries where pool_id=$1 order by rank`,[poolId]);
      const gs=await db.query(`select id,group_no,name from tournament_groups where stage_id=$1 order by group_no`,[stage.id]);
      const mode=String(b.qualification_mode||"each_group"),qualify=Math.max(1,Number(b.qualify_per_group||stage.qualify_per_group||3));const qualifiers:any[]=[];
@@ -210,7 +210,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
    try {
      const stageNo=Number(b.stage_no||0);
      if(stageNo<=1)return NextResponse.json({error:"Stage 1 is the base stage and cannot be deleted."},{status:400});
-     const latest=await db.query(`select id,stage_no,name,source_pool_id from tournament_stages where lobby_id=$1 order by stage_no desc limit 1`,[id]);
+     const latest=await db.query(`select id,stage_no,name,source_pool_id,direct_pool_id from tournament_stages where lobby_id=$1 order by stage_no desc limit 1`,[id]);
      if(!latest.rows.length)return NextResponse.json({error:"No tournament stages found."},{status:404});
      const stage=latest.rows[0];
      if(Number(stage.stage_no)!==stageNo)return NextResponse.json({error:`Only the latest stage can be deleted. Delete Stage ${stage.stage_no} first.`},{status:400});
@@ -221,6 +221,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
        await client.query(`delete from results where lobby_id=$1 and stage_no=$2`,[id,stageNo]);
        await client.query(`delete from tournament_stages where id=$1`,[stage.id]);
        if(stage.source_pool_id)await client.query(`delete from tournament_pools where id=$1`,[stage.source_pool_id]);
+       if(stage.direct_pool_id)await client.query(`delete from tournament_pools where id=$1`,[stage.direct_pool_id]);
        const previous=await client.query(`select coalesce(max(stage_no),1)::int stage_no from tournament_stages where lobby_id=$1`,[id]);
        await client.query(`update lobbies set current_stage=$2 where id=$1`,[id,previous.rows[0].stage_no]);
        await client.query(`insert into audit_logs(id,action,detail) values($1,'STAGE_DELETED',$2)`,[crypto.randomUUID(),`${l.rows[0]?.title||id} · Stage ${stageNo} · ${stage.name}`]);

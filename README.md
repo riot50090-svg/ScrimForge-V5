@@ -1,18 +1,11 @@
-# ScrimForge V5 Complete
+# ScrimForge V5 — Dynamic Direct/Last Chance Fix
 
-This is the full V5 build: public scrims, registration, WhatsApp handoff, status lookup, admin login, lobby management, registration/payment management, room details, results, leaderboard, audit logs and DB health check.
+This update fixes the Direct Finalists pool linkage in the qualification-pool → split → Last Chance workflow.
 
-## Render settings
-Build: `npm install && npm run build`
-Start: `npm start`
-
-Environment variables:
-- DATABASE_URL = Render PostgreSQL Internal Database URL
-- AUTH_SECRET = long random secret
-- ADMIN_EMAIL = admin login email
-- ADMIN_PASSWORD = admin login password
-- WHATSAPP_NUMBER = business WhatsApp number with country code, digits only
-- NEXT_PUBLIC_SITE_URL = Render site URL
-
-Admin: `/admin`
-Health: `/api/health`
+- Direct finalist count is taken from the admin setting; it is not hardcoded to 6.
+- Remaining teams are calculated as qualification-pool size minus direct finalists.
+- The Last Chance stage references the remaining pool separately from the Direct Finalists pool.
+- Direct Finalists display now reads from the actual direct-finalist pool.
+- Grand Final merge uses the actual direct-finalist pool.
+- Stage deletion removes both the Last Chance pool and its linked Direct Finalists pool.
+- UI notices no longer assume 30 → 6 → 24; they display the configured numbers dynamically.
